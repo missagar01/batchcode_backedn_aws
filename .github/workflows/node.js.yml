@@ -20,16 +20,28 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Find app directory (server.cjs)
+        id: finddir
+        run: |
+          APP_DIR="$(dirname "$(find . -maxdepth 4 -name server.cjs -print -quit)")"
+          if [ -z "$APP_DIR" ]; then
+            echo "❌ server.cjs not found"
+            echo "Listing repo root:"
+            ls -la
+            exit 1
+          fi
+          echo "✅ APP_DIR=$APP_DIR"
+          echo "APP_DIR=$APP_DIR" >> $GITHUB_ENV
+
       - name: Restore .env (NEVER DELETE)
         run: |
-          APP_DIR="O2D-BatchCode-Lead-backend-aws"
           if [ ! -f "/home/ubuntu/secrets/o2d-backend/.env" ]; then
             echo "❌ Missing /home/ubuntu/secrets/o2d-backend/.env"
             exit 1
           fi
           cp /home/ubuntu/secrets/o2d-backend/.env "$APP_DIR/.env"
           chmod 600 "$APP_DIR/.env"
-          echo "✅ .env restored"
+          echo "✅ .env restored to $APP_DIR/.env"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -38,14 +50,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd O2D-BatchCode-Lead-backend-aws
+          cd "$APP_DIR"
           npm ci --no-audit --no-fund
 
       - name: Start / Restart PM2
         run: |
-          cd O2D-BatchCode-Lead-backend-aws
+          cd "$APP_DIR"
 
-          # delete old wrong app if exists
+          # remove old wrong app if exists
           pm2 delete o2d-backend || true
 
           # correct app
