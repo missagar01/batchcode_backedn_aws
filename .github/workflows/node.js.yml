@@ -18,47 +18,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          clean: false
           fetch-depth: 1
 
-      - name: Ensure secrets folder exists
+      - name: Deploy to fixed folder
         run: |
-          mkdir -p /home/ubuntu/secrets/o2d-backend
-          chmod 700 /home/ubuntu/secrets
-          chmod 700 /home/ubuntu/secrets/o2d-backend
+          sudo mkdir -p /var/www/o2d-backend
+          sudo rsync -a --delete --exclude ".env" ./ /var/www/o2d-backend/
+          sudo chown -R ubuntu:ubuntu /var/www/o2d-backend
 
       - name: Restore .env (persistent on EC2)
         run: |
+          mkdir -p /home/ubuntu/secrets/o2d-backend
           if [ ! -f "/home/ubuntu/secrets/o2d-backend/.env" ]; then
             echo "❌ Missing /home/ubuntu/secrets/o2d-backend/.env"
-            echo "👉 Fix on EC2:"
-            echo "   sudo nano /home/ubuntu/secrets/o2d-backend/.env"
-            echo "   sudo chmod 600 /home/ubuntu/secrets/o2d-backend/.env"
             exit 1
           fi
-
-          cp /home/ubuntu/secrets/o2d-backend/.env .env
-          chmod 600 .env
-          echo "✅ .env restored to workspace: $(pwd)/.env"
+          cp /home/ubuntu/secrets/o2d-backend/.env /var/www/o2d-backend/.env
+          chmod 600 /var/www/o2d-backend/.env
+          echo "✅ .env restored to /var/www/o2d-backend/.env"
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Start/Restart Backend (PM2)
+      - name: Install dependencies (in deploy folder)
         run: |
+          cd /var/www/o2d-backend
+          npm ci --no-audit --no-fund
+
+      - name: Start/Restart Backend (PM2) from deploy folder
+        run: |
+          cd /var/www/o2d-backend
           if pm2 describe o2d-backend >/dev/null 2>&1; then
-            pm2 restart o2d-backend --update-env --cwd "$(pwd)"
+            pm2 restart o2d-backend --update-env --cwd /var/www/o2d-backend
           else
-            pm2 start server.cjs --name o2d-backend --cwd "$(pwd)"
+            pm2 start server.cjs --name o2d-backend --cwd /var/www/o2d-backend
           fi
           pm2 save
 
       - name: Health check logs (last 40 lines)
         run: pm2 logs o2d-backend --lines 40 --nostream
+
