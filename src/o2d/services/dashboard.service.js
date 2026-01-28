@@ -162,8 +162,7 @@ where t.entity_code='SR'
       and t.series='SA'
       and t.div_code='PM'
       and t.acc_vrno<>'CANCELLED'
-      and t.vrdate >= TO_DATE(:p_from_date, 'YYYY-MM-DD')
-      and t.vrdate <  TO_DATE(:p_to_date,   'YYYY-MM-DD') + 1)
+      and t.vrdate>=trunc(sysdate,'MM'))
 `;
 
 const PENDING_ORDERS_STATS_QUERY = `
@@ -176,8 +175,6 @@ where t.entity_code='SR'
       and t.approveddate is not null
       and t.closeddate is null
       and ((t.qtyorder - nvl(t.SALE_INVOICE_QTY,0)) + nvl(t.SRET_QTY,0)) > 0
-      and t.vrdate >= TO_DATE(:p_from_date, 'YYYY-MM-DD')
-      and t.vrdate <  TO_DATE(:p_to_date,   'YYYY-MM-DD') + 1
 order by t.vrdate asc)
 `;
 
@@ -210,10 +207,10 @@ async function getDashboardData({
 
   // Use cache wrapper
   return await withCache(cacheKey, DEFAULT_TTL.DASHBOARD, async () => {
-    // Defaults: Use CURRENT MONTH for summary metrics (not entire history)
+    // Defaults: Use CURRENT MONTH for summary metrics (from start of month to TODAY)
     const today = new Date();
     const defaultFrom = new Date(today.getFullYear(), today.getMonth(), 1); // First day of current month
-    const defaultTo = new Date(today.getFullYear(), today.getMonth() + 1, 0); // Last day of current month
+    const defaultTo = today; // Today (not last day of month)
 
     const p_party = partyName || null;
     const p_item = itemName || null;
@@ -252,10 +249,10 @@ async function getDashboardData({
         connection.execute(BASE_DASHBOARD_QUERY, binds, {
           outFormat: oracledb.OUT_FORMAT_OBJECT,
         }),
-        connection.execute(MONTHLY_STATS_QUERY, summaryDateBinds, {
+        connection.execute(MONTHLY_STATS_QUERY, {}, {
           outFormat: oracledb.OUT_FORMAT_OBJECT,
         }),
-        connection.execute(PENDING_ORDERS_STATS_QUERY, summaryDateBinds, {
+        connection.execute(PENDING_ORDERS_STATS_QUERY, {}, {
           outFormat: oracledb.OUT_FORMAT_OBJECT,
         }),
         connection.execute(SAUDA_AVERAGE_QUERY, summaryDateBinds, {
