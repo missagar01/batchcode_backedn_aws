@@ -62,6 +62,35 @@ WHERE (:p_party     IS NULL OR party_name = :p_party)
 ORDER BY indate DESC
 `;
 
+const FILTERS_QUERY = `
+WITH order_sales AS (
+  SELECT vrno, entity_code, MAX(lhs_utility.get_name('emp_code', emp_code)) AS sales_person
+  FROM view_order_engine
+  WHERE entity_code = 'SR'
+  GROUP BY vrno, entity_code
+),
+base_filters AS (
+    SELECT
+        os.sales_person,
+        lhs_utility.get_name('state_code', acc.state_code) AS state,
+        t.acc_remark AS party_name,
+        CASE
+            WHEN t.div_code = 'SM' THEN 'MS BILLET'
+            WHEN t.div_code = 'RP' THEN 'MS STRIP'
+            WHEN t.div_code = 'PM' THEN 'MS PIPE'
+            ELSE NULL
+        END AS item_name
+    FROM view_weighbridge_engine t
+    LEFT JOIN order_sales os ON os.vrno = t.order_vrno AND os.entity_code = 'SR'
+    LEFT JOIN acc_mast acc ON acc.acc_code = t.acc_code
+    WHERE t.vrdate >= DATE '2025-04-01'
+      AND t.entity_code = 'SR'
+      AND t.tcode = 'S'
+      AND t.item_catg IN ('F0001','F0002','F0003')
+)
+SELECT DISTINCT party_name, item_name, sales_person, state FROM base_filters
+`;
+
 const SAUDA_AVERAGE_QUERY = `
 select case when t.div_code = 'PM' then 'PIPE'
        when t.div_code = 'RP' then 'STRIPS'
@@ -246,7 +275,7 @@ async function getDashboardData({
         throw new Error("Failed to establish Oracle database connection");
       }
 
-      const [result, monthlyRes, pendingRes, saudaAvgRes, salesAvgRes, saudaRateRes, gdRes] = await Promise.all([
+      const [result, monthlyRes, pendingRes, saudaAvgRes, salesAvgRes, saudaRateRes, gdRes, filtersRes] = await Promise.all([
         connection.execute(BASE_DASHBOARD_QUERY, binds, {
           outFormat: oracledb.OUT_FORMAT_OBJECT,
         }),
@@ -267,10 +296,14 @@ async function getDashboardData({
         }),
         connection.execute(GD_QUERY, summaryDateBinds, {
           outFormat: oracledb.OUT_FORMAT_OBJECT,
+        }),
+        connection.execute(FILTERS_QUERY, {}, {
+          outFormat: oracledb.OUT_FORMAT_OBJECT,
         })
       ]);
 
       const rows = result.rows || [];
+      const filterRows = filtersRes.rows || [];
 
       // Extract aggregate stats
       const mRow = (monthlyRes.rows && monthlyRes.rows[0]) ? monthlyRes.rows[0] : {};
@@ -294,16 +327,16 @@ async function getDashboardData({
 
 
       const uniqueParties = Array.from(
-        new Set(rows.map((r) => r.PARTY_NAME).filter(Boolean))
+        new Set(filterRows.map((r) => r.PARTY_NAME).filter(Boolean))
       );
       const uniqueItems = Array.from(
-        new Set(rows.map((r) => r.ITEM_NAME).filter(Boolean))
+        new Set(filterRows.map((r) => r.ITEM_NAME).filter(Boolean))
       );
       const uniqueSales = Array.from(
-        new Set(rows.map((r) => r.SALES_PERSON).filter(Boolean))
+        new Set(filterRows.map((r) => r.SALES_PERSON).filter(Boolean))
       );
       const uniqueStates = Array.from(
-        new Set(rows.map((r) => (r.STATE ? r.STATE.trim() : "")).filter(Boolean))
+        new Set(filterRows.map((r) => (r.STATE ? r.STATE.trim() : "")).filter(Boolean))
       );
 
       const dataRows = rows.map((r) => ({
