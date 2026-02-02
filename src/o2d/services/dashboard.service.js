@@ -64,6 +64,49 @@ WHERE (:p_party     IS NULL OR party_name = :p_party)
 ORDER BY indate ASC
 `;
 
+const ALL_SAUDA_AVG_QUERY = `
+select case when t.div_code = 'PM' then 'PIPE'
+       when t.div_code = 'RP' then 'STRIPS'
+       when t.div_code = 'SM' then 'BILLET'
+       end as item,
+       round((sum((t.rate*((t.qtyorder - nvl(t.SALE_INVOICE_QTY,0)) + nvl(t.SRET_QTY,0))))/sum(((t.qtyorder - nvl(t.SALE_INVOICE_QTY,0)) + nvl(t.SRET_QTY,0)))),0) as average
+       
+from view_order_engine t
+where t.entity_code='SR'
+      and t.tcode='E'
+      and t.approveddate is not null
+      and t.closeddate is null
+      and ((t.qtyorder - nvl(t.SALE_INVOICE_QTY,0)) + nvl(t.SRET_QTY,0)) > 0
+group by t.div_code
+`;
+
+const SALES_AVG_QUERY = `
+select case when t.div_code = 'PM' then 'PIPE'
+       when t.div_code = 'RP' then 'STRIPS'
+       when t.div_code = 'SM' then 'BILLET'
+       end as item,
+       round((sum(t.tax_onamount)/sum(t.qtyissued)),0) as average
+from view_itemtran_engine t
+where t.entity_code='SR'
+      and t.series='SA'
+      and t.vrdate >= TO_DATE(:p_start_date, 'YYYY-MM-DD')
+      and t.vrdate < trunc(sysdate+1)
+group by t.div_code
+`;
+
+const SAUDA_RATE_SERIES_QUERY = `
+select round(avg(average),0) as average from 
+(select t.vrdate, round(avg(t.rate),0) as average
+from view_order_engine t
+where t.entity_code='SR'
+      and t.tcode='E'
+      and t.vrdate >= TO_DATE(:p_start_date, 'YYYY-MM-DD')
+      and t.vrdate < trunc(sysdate+1)
+      and t.div_code='PM'
+group by t.vrdate
+order by t.vrdate )
+`;
+
 function parseDateParam(value) {
   if (!value) return null;
   const d = new Date(value);
@@ -215,4 +258,43 @@ async function getDashboardData({
   });
 }
 
-module.exports = { getDashboardData };
+async function getAnalyticsMetrics() {
+  const cacheKey = generateCacheKey("dashboard_analytics", {
+    date: new Date().toISOString().slice(0, 10) // Cache by day/hour? Using generic key to ttl
+  });
+
+  return await withCache(cacheKey, DEFAULT_TTL.DASHBOARD, async () => {
+    let connection;
+    try {
+      connection = await getConnection();
+      if (!connection) throw new Error("Oracle connection failed");
+
+      // Default start date as per user request (01-jan-2026)
+      // formatting as YYYY-MM-DD for consistency
+      const startDate = '2026-01-01';
+
+      const [saudaAvgResult, salesAvgResult, saudaRateResult] = await Promise.all([
+        connection.execute(ALL_SAUDA_AVG_QUERY, {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+        connection.execute(SALES_AVG_QUERY, { p_start_date: startDate }, { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+        connection.execute(SAUDA_RATE_SERIES_QUERY, { p_start_date: startDate }, { outFormat: oracledb.OUT_FORMAT_OBJECT })
+      ]);
+
+      return {
+        allSaudaAverage: saudaAvgResult.rows || [],
+        currentMonthSalesAverage: salesAvgResult.rows || [],
+        saudaAverageRate: saudaRateResult.rows?.[0]?.AVERAGE || 0,
+        lastUpdated: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error("❌ Error in getAnalyticsMetrics:", error.message);
+      throw error;
+    } finally {
+      if (connection) {
+        try { await connection.close(); } catch (e) { }
+      }
+    }
+  });
+}
+
+module.exports = { getDashboardData, getAnalyticsMetrics };

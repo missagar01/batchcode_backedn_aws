@@ -28,4 +28,18 @@ async function fetchDashboardSummary(req, res) {
   }
 }
 
-module.exports = { fetchDashboardSummary };
+async function fetchAnalyticsMetrics(req, res) {
+  try {
+    const { getAnalyticsMetrics } = require("../services/dashboard.service.js");
+    const data = await getAnalyticsMetrics();
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch analytics metrics",
+      error: error.message,
+    });
+  }
+}
+
+module.exports = { fetchDashboardSummary, fetchAnalyticsMetrics };
