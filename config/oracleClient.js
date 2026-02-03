@@ -116,6 +116,8 @@ function initOracleClient() {
   }
 }
 
+
+
 function isOracleEnabled() {
   return oracleEnabled;
 }
