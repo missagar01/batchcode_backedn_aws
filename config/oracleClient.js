@@ -29,10 +29,21 @@ function pickFirstExisting(list) {
   return list.find(exists);
 }
 
+let oracleEnabled = false;
+
 function initOracleClient() {
-  // Prevent double init (PM2 / hot reload / multiple imports)
-  if (global.__oracleClientInitialised) return;
+  // Prevent double init
+  if (global.__oracleClientInitialised) {
+    return;
+  }
   global.__oracleClientInitialised = true;
+
+  // 1. Check manual disable switch
+  if (process.env.ENABLE_ORACLE === 'false') {
+    console.warn("🚫 Oracle disabled by config (ENABLE_ORACLE=false)");
+    oracleEnabled = false;
+    return;
+  }
 
   const envDir = process.env.ORACLE_CLIENT_LIB_DIR || process.env.ORACLE_CLIENT;
 
@@ -68,10 +79,10 @@ function initOracleClient() {
 
   console.log("🔍 Oracle Instant Client libDir:", libDir || "(not found)");
 
-  // If not found -> Thin mode
+  // If not found -> we CANNOT use Thin mode for this DB, so we must DISABLE Oracle
   if (!libDir) {
-    console.log("ℹ️ Instant Client not found → running in Thin mode.");
-    console.log("🧩 node-oracledb:", oracledb.versionString);
+    console.error("❌ Oracle Thick client not available (libs not found) → DISABLING Oracle");
+    oracleEnabled = false;
     return;
   }
 
@@ -80,24 +91,33 @@ function initOracleClient() {
     oracledb.initOracleClient({ libDir });
     console.log("✅ Oracle Thick mode initialised:", libDir);
     console.log("🧩 node-oracledb:", oracledb.versionString);
+    oracleEnabled = true; // SUCCESS!
   } catch (err) {
     // If already initialised, ignore
     if (String(err).includes("already been initialized")) {
       console.log("ℹ️ Oracle client already initialised.");
+      oracleEnabled = true; // Assume success if already done
       return;
     }
 
     // Check for DPI-1047 (Library loading error)
     if (String(err).includes("DPI-1047")) {
-      console.error("❌ Oracle Client Library Load Error (DPI-1047):");
+      console.error("❌ Oracle Client Library Load Error (DPI-1047) → DISABLING Oracle");
       console.error("   This usually means `libaio1` is missing on Linux.");
       console.error("   Try running: `sudo apt-get install libaio1`");
       console.error(`   Library Path attempted: ${libDir}`);
+      oracleEnabled = false;
+      return;
     }
 
     console.error("❌ Oracle init failed details:", err);
-    throw err;
+    // Don't throw, just disable
+    oracleEnabled = false;
   }
 }
 
-module.exports = { initOracleClient };
+function isOracleEnabled() {
+  return oracleEnabled;
+}
+
+module.exports = { initOracleClient, isOracleEnabled };

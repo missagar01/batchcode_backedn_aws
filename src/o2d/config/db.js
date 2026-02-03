@@ -62,6 +62,14 @@ async function initPool() {
     // ✅ MUST happen before createPool
     initOracleClient();
 
+    // Check if Oracle init was successful or disabled
+    const { isOracleEnabled } = require("../../../config/oracleClient.js");
+    if (!isOracleEnabled()) {
+      console.warn("⚠️ Oracle is DISABLED or failed to initialize. Skipping pool creation.");
+      poolInitializing = false;
+      return;
+    }
+
     let connectString;
     if (usingSSHTunnel && sshTunnelActive) {
       connectString = `127.0.0.1:${LOCAL_ORACLE_PORT}/${ORACLE_SERVICE}`;

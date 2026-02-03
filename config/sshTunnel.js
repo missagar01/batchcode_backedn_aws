@@ -59,17 +59,30 @@ function cleanupClient() {
   }
 }
 
+const MAX_SSH_RECONNECT_ATTEMPTS = 5;
+let reconnectAttempts = 0;
+
 async function scheduleReconnect() {
   if (reconnectTimer) return;
 
+  if (reconnectAttempts >= MAX_SSH_RECONNECT_ATTEMPTS) {
+    console.error(`🚫 SSH permanently disabled after ${MAX_SSH_RECONNECT_ATTEMPTS} failures.`);
+    console.error("   Please check your network, SSH credentials, or remote server status.");
+    return;
+  }
+
   const delayMs = Math.min(reconnectDelayMs, MAX_BACKOFF_MS);
-  console.warn(`🔄 Scheduling SSH reconnect in ${delayMs / 1000}s...`);
+  reconnectAttempts++;
+  console.warn(`🔄 Scheduling SSH reconnect (${reconnectAttempts}/${MAX_SSH_RECONNECT_ATTEMPTS}) in ${delayMs / 1000}s...`);
 
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
     reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_BACKOFF_MS);
     try {
-      await establishTunnels(); // background reconnect; errors will be logged
+      await establishTunnels();
+      // specific error callback handles failures, but if establishTunnels resolves, 
+      // it means connection was successful at that moment. 
+      // However, establishTunnels resolves only on 'ready' event.
     } catch (err) {
       console.error('❌ Reconnect attempt failed:', err.message);
       scheduleReconnect();
@@ -235,6 +248,7 @@ async function establishTunnels() {
         );
 
         resetBackoff();
+        reconnectAttempts = 0; // ✅ Reset retry counter on success
         resolved = true;
         resolve({ sshClient, oracleTunnelServer, postgresTunnelServer });
       } catch (err) {
