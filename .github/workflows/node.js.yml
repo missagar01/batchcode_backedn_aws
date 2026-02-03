@@ -15,36 +15,45 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      # 1️⃣ Checkout code
+      # 1️⃣ Checkout code (no secrets here)
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      # 2️⃣ Set FIXED app directory
+      # 2️⃣ Define fixed app directory
       - name: Set APP_DIR
         run: |
           APP_DIR="/home/ubuntu/actions-runner/_work/O2D-BatchCode-Lead-backend-aws/O2D-BatchCode-Lead-backend-aws"
           echo "APP_DIR=$APP_DIR" >> $GITHUB_ENV
           echo "✅ APP_DIR set to $APP_DIR"
 
-      # 3️⃣ Ensure .env exists (never overwrite)
+      # 3️⃣ Ensure .env exists (NEVER overwrite)
       - name: Ensure .env exists safely
         run: |
           if [ ! -f "$APP_DIR/.env" ]; then
-            echo "⚠️ .env not found"
+            echo "⚠️ .env not found in app dir"
 
             if [ ! -f "/home/ubuntu/secrets/o2d-backend/.env" ]; then
-              echo "❌ Source .env missing"
+              echo "❌ Source .env missing in secrets folder"
               exit 1
             fi
 
             cp /home/ubuntu/secrets/o2d-backend/.env "$APP_DIR/.env"
             chmod 600 "$APP_DIR/.env"
-            echo "✅ .env copied"
+            echo "✅ .env copied securely"
           else
             echo "✅ .env already exists — untouched"
           fi
+
+      # 3.5️⃣ Verify .env integrity (extra safety)
+      - name: Verify .env integrity
+        run: |
+          if [ ! -s "$APP_DIR/.env" ]; then
+            echo "❌ .env missing or empty — aborting deploy"
+            exit 1
+          fi
+          echo "✅ .env integrity verified"
 
       # 4️⃣ Setup Node.js
       - name: Setup Node.js
@@ -52,41 +61,39 @@ jobs:
         with:
           node-version: "20"
 
-      # 4.5️⃣ Install System Dependencies (Oracle Libs)
-      - name: Install System Dependencies
+      # 5️⃣ Install system dependencies (Oracle needs this)
+      - name: Install system dependencies
         run: |
-          echo "🔧 Installing libaio..."
           sudo apt-get update || true
-          # Try installing libaio1 (older) or libaio1t64 (newer)
-          sudo apt-get install -y libaio1 unzip wget || sudo apt-get install -y libaio1t64 unzip wget
+          sudo apt-get install -y unzip wget \
+            || sudo apt-get install -y libaio1t64 unzip wget
           echo "✅ System dependencies installed"
 
-      # 5️⃣ Install dependencies
-      - name: Install dependencies
+      # 6️⃣ Install npm dependencies
+      - name: Install npm dependencies
         run: |
           cd "$APP_DIR"
           npm ci --no-audit --no-fund
 
-      # 6️⃣ Start / Restart PM2 (CORRECT APP)
+      # 7️⃣ Start / Restart PM2 (ONLY ONE APP)
       - name: Start / Restart PM2 (o2d-backend)
         run: |
           cd "$APP_DIR"
 
-          pm2 delete o2d-lead-batch || true   # cleanup old wrong app
+          pm2 delete o2d-lead-batch || true
           pm2 delete o2d-backend || true
 
-          PORT=3004 pm2 start server.js \
+          pm2 start server.js \
             --name o2d-backend \
             --update-env
 
           pm2 save
-          echo "✅ PM2 o2d-backend deployed"
+          echo "✅ PM2 o2d-backend started"
 
-      # 7️⃣ Health check
-           # 7️⃣ Health check (FAST & SAFE)
-      - name: Health check (wait for port)
+      # 8️⃣ Health check (local + public)
+      - name: Health check
         run: |
-          echo "⏳ Waiting for port 3004 (max 30s)..."
+          echo "⏳ Waiting for port 3004..."
 
           for i in {1..15}; do
             if ss -lnt | grep -q ":3004"; then
@@ -96,9 +103,7 @@ jobs:
             sleep 2
           done
 
-          # Final verification (1 time only)
-          curl -f http://127.0.0.1:3004/health || exit 1
-          curl -f -k https://o2d.sagartmt.com/api/health || echo "⚠️ Public health check skipped/failed (DNS propagation/SSL issue?)"
+          curl -f http://127.0.0.1:3004/health
+          curl -f -k https://o2d.sagartmt.com/api/health || echo "⚠️ Public health skipped"
 
-
-          echo "🎉 Health check passed"
+          echo "🎉 Deploy successful"

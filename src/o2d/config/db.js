@@ -22,12 +22,15 @@ function validateEnv() {
   if (usingSSHTunnel) {
     const hasAuth = process.env.SSH_PASSWORD || process.env.SSH_KEY_PATH || process.env.SSH_PRIVATE_KEY;
     if (!hasAuth) missing.push("SSH_PASSWORD (or SSH_KEY_PATH or SSH_PRIVATE_KEY)");
+    // Note: When using SSH tunnel, we construct the connection string dynamically, 
+    // so ORACLE_CONNECTION_STRING is NOT required.
   } else if (!usingDirectConnection) {
+    // If NOT using SSH tunnel, we MUST have a direct connection string
     missing.push("ORACLE_CONNECTION_STRING (or SSH_HOST/SSH_USER...)");
   }
 
   if (missing.length) {
-    throw new Error(`Missing env: ${missing.join(", ")}`);
+    throw new Error(`Missing or empty required environment variables: ${missing.join(", ")}\nPlease check your .env file and ensure these variables are set:\n  - ${missing.join("\n  - ")}`);
   }
 }
 
