@@ -2,7 +2,8 @@ const followupService = require("../services/followup.service.js");
 
 async function getAllFollowups(req, res) {
     try {
-        const followups = await followupService.getAllFollowups();
+        const { role, user_name, username } = req.user;
+        const followups = await followupService.getAllFollowups(user_name || username, role);
         res.status(200).json({ success: true, data: followups });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });

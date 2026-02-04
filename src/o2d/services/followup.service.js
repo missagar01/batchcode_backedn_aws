@@ -6,10 +6,16 @@ const FOLLOWUPS_CACHE_KEY = generateCacheKey("followups");
 /**
  * Get all followups
  */
-async function getAllFollowups() {
-    return withCache(FOLLOWUPS_CACHE_KEY, DEFAULT_TTL.TIMELINE, async () => {
+async function getAllFollowups(username, role) {
+    const userRole = (role || "").toString().toLowerCase();
+    const isAdmin = userRole === "admin" || userRole === "all access";
+
+    // Use user-specific cache key for non-admins to avoid data leakage
+    const cacheKey = isAdmin ? FOLLOWUPS_CACHE_KEY : `${FOLLOWUPS_CACHE_KEY}_${username}`;
+
+    return withCache(cacheKey, DEFAULT_TTL.TIMELINE, async () => {
         try {
-            const query = `
+            let query = `
                 SELECT 
                     followup_id, 
                     client_name, 
@@ -19,9 +25,17 @@ async function getAllFollowups() {
                     date_of_calling, 
                     next_calling_date 
                 FROM client_followups 
-                ORDER BY date_of_calling DESC, followup_id DESC
             `;
-            const result = await pgQuery(query);
+            const values = [];
+
+            if (!isAdmin && username) {
+                query += ` WHERE LOWER(TRIM(sales_person)) = LOWER($1) `;
+                values.push(username);
+            }
+
+            query += ` ORDER BY date_of_calling DESC, followup_id DESC `;
+
+            const result = await pgQuery(query, values);
             return result.rows;
         } catch (err) {
             console.error("Error fetching followups:", err);
@@ -66,6 +80,9 @@ async function createFollowup(followupData) {
 
         // Invalidate cache
         await delCached(FOLLOWUPS_CACHE_KEY);
+        if (sales_person) {
+            await delCached(`${FOLLOWUPS_CACHE_KEY}_${sales_person}`);
+        }
 
         return result.rows[0];
     } catch (err) {
@@ -129,6 +146,9 @@ async function updateFollowup(followupId, followupData) {
 
         // Invalidate cache
         await delCached(FOLLOWUPS_CACHE_KEY);
+        if (sales_person) {
+            await delCached(`${FOLLOWUPS_CACHE_KEY}_${sales_person}`);
+        }
 
         return result.rows[0];
     } catch (err) {
