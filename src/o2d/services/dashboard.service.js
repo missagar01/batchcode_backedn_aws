@@ -189,50 +189,69 @@ order by t.vrdate )
 
 const GD_QUERY = `
 SELECT
-   /* Monthly GD */
-   COALESCE(
-     (
-       SELECT ROUND(SUM(summary) / NULLIF(SUM(qtyissued), 0), 0)
-       FROM (
-         SELECT t.qtyissued,
-                ( COALESCE(AVG(t.afrate3),0)
-                + COALESCE(AVG(t.afrate4),0)
-                + (COALESCE(AVG(t.fc_rate),0) - COALESCE(AVG(t.contract_rate),0))
-                ) * COALESCE(SUM(t.qtyissued),0) AS summary
-         FROM view_itemtran_engine t
-         WHERE t.entity_code = 'SR'
-           AND t.series = 'SA'
-           AND t.div_code = 'PM'
-           AND t.vrdate >= TO_DATE(:p_from_date, 'YYYY-MM-DD')
-           AND t.vrdate < TO_DATE(:p_to_date, 'YYYY-MM-DD') + 1
-         GROUP BY t.emp_code, t.item_name, t.contract_vrno,
-                  t.qtyissued, t.fc_rate, t.contract_rate, t.afrate3, t.afrate4
-       )
-     ), 0
-   ) AS monthly_gd,
+  merged_sales_person AS sales_person,
 
-   /* Daily GD - Last day of selected month */
-   COALESCE(
-     (
-       SELECT ROUND(SUM(summary) / NULLIF(SUM(qtyissued), 0), 0)
-       FROM (
-         SELECT t.qtyissued,
-                ( COALESCE(AVG(t.afrate3),0)
-                + COALESCE(AVG(t.afrate4),0)
-                + (COALESCE(AVG(t.fc_rate),0) - COALESCE(AVG(t.contract_rate),0))
-                ) * COALESCE(SUM(t.qtyissued),0) AS summary
-         FROM view_itemtran_engine t
-         WHERE t.entity_code = 'SR'
-           AND t.series = 'SA'
-           AND t.div_code = 'PM'
-           AND t.vrdate >= TO_DATE(:p_to_date, 'YYYY-MM-DD')
-           AND t.vrdate < TO_DATE(:p_to_date, 'YYYY-MM-DD') + 1
-         GROUP BY t.emp_code, t.item_name, t.contract_vrno,
-                  t.qtyissued, t.fc_rate, t.contract_rate, t.afrate3, t.afrate4
-       )
-     ), 0
-   ) AS daily_gd
-FROM dual
+  /* Monthly GD – selected month range */
+  COALESCE(
+    ROUND(
+      SUM(monthly_summary) / NULLIF(SUM(monthly_qty), 0),
+    0),
+  0) AS monthly_gd,
+  SUM(monthly_qty) AS monthly_qty,
+
+  /* Daily GD – selected end date (usually today or last day of month) */
+  COALESCE(
+    ROUND(
+      SUM(daily_summary) / NULLIF(SUM(daily_qty), 0),
+    0),
+  0) AS daily_gd,
+  SUM(daily_qty) AS daily_qty
+
+FROM (
+  SELECT
+    /* Merge sales persons */
+    CASE
+      WHEN lhs_utility.get_name('emp_code', t.emp_code)
+           IN ('DIRECT', 'DC GOUTAM', 'P.S GEDAM')
+        THEN 'ANIL MISHRA'
+      ELSE lhs_utility.get_name('emp_code', t.emp_code)
+    END AS merged_sales_person,
+
+    /* Monthly calculation (full selected range) */
+    (
+      COALESCE(t.afrate3,0)
+    + COALESCE(t.afrate4,0)
+    + (COALESCE(t.fc_rate,0) - COALESCE(t.contract_rate,0))
+    ) * COALESCE(t.qtyissued,0) AS monthly_summary,
+    COALESCE(t.qtyissued,0) AS monthly_qty,
+
+    /* Daily calculation (target day only - p_to_date) */
+    CASE
+      WHEN t.vrdate >= TO_DATE(:p_to_date, 'YYYY-MM-DD')
+       AND t.vrdate <  TO_DATE(:p_to_date, 'YYYY-MM-DD') + 1
+      THEN (
+        COALESCE(t.afrate3,0)
+      + COALESCE(t.afrate4,0)
+      + (COALESCE(t.fc_rate,0) - COALESCE(t.contract_rate,0))
+      ) * COALESCE(t.qtyissued,0)
+    END AS daily_summary,
+
+    CASE
+      WHEN t.vrdate >= TO_DATE(:p_to_date, 'YYYY-MM-DD')
+       AND t.vrdate <  TO_DATE(:p_to_date, 'YYYY-MM-DD') + 1
+      THEN COALESCE(t.qtyissued,0)
+    END AS daily_qty
+
+  FROM view_itemtran_engine t
+  WHERE t.entity_code = 'SR'
+    AND t.series = 'SA'
+    AND t.div_code = 'PM'
+    /* Range filter */
+    AND t.vrdate >= TO_DATE(:p_from_date, 'YYYY-MM-DD')
+    AND t.vrdate <  TO_DATE(:p_to_date, 'YYYY-MM-DD') + 1
+)
+GROUP BY merged_sales_person
+ORDER BY merged_sales_person
 `;
 
 const MONTHLY_STATS_QUERY = `
@@ -274,16 +293,41 @@ ORDER BY sales_person
 
 
 const PENDING_ORDERS_STATS_QUERY = `
-select count(acc_code) as total, round(((count(acc_code)/900)*100),0)|| '%' as conversion_ratio from
-(select distinct t.acc_code
-from view_order_engine t
-where t.entity_code='SR'
-      and t.tcode='E'
-      and t.div_code='PM'
-      and t.approveddate is not null
-      and t.closeddate is null
-      and ((t.qtyorder - nvl(t.SALE_INVOICE_QTY,0)) + nvl(t.SRET_QTY,0)) > 0
-order by t.vrdate asc)
+SELECT
+  CASE
+    WHEN sales_person IN ('DIRECT', 'DC GOUTAM', 'P.S GEDAM')
+      THEN 'ANIL MISHRA'
+    ELSE sales_person
+  END AS sales_person,
+
+  COUNT(DISTINCT acc_code) AS total,
+
+  ROUND(
+    (COUNT(DISTINCT acc_code) / 900) * 100,
+  0) || '%' AS conversion_ratio
+
+FROM (
+  SELECT
+    lhs_utility.get_name('emp_code', t.emp_code) AS sales_person,
+    t.acc_code
+  FROM view_order_engine t
+  WHERE t.entity_code = 'SR'
+    AND t.tcode = 'E'
+    AND t.div_code = 'PM'
+    AND t.approveddate IS NOT NULL
+    AND t.closeddate IS NULL
+    AND ((t.qtyorder - NVL(t.sale_invoice_qty, 0))
+         + NVL(t.sret_qty, 0)) > 0
+)
+
+GROUP BY
+  CASE
+    WHEN sales_person IN ('DIRECT', 'DC GOUTAM', 'P.S GEDAM')
+      THEN 'ANIL MISHRA'
+    ELSE sales_person
+  END
+
+ORDER BY sales_person
 `;
 
 function parseDateParam(value) {
@@ -388,22 +432,22 @@ async function getDashboardData({
 
       // Extract aggregate stats
       const monthlyStats = monthlyRes.rows || [];
-      const pRow = (pendingRes.rows && pendingRes.rows[0]) ? pendingRes.rows[0] : {};
-      const gdRow = (gdRes.rows && gdRes.rows[0]) ? gdRes.rows[0] : {};
+      const pendingStats = pendingRes.rows || [];
+      const gdStats = gdRes.rows || [];
       const saudaRateRow = (saudaRateRes.rows && saudaRateRes.rows[0]) ? saudaRateRes.rows[0] : {};
 
       // Calculate totals for backward compatibility if needed, or just pass the array
       // const monthlyWorkingParty = mRow.MONTHLY_WORKING_PARTY || 0;
       // const monthlyPartyAverage = mRow.MONTHLY_PARTY_AVERAGE || '0%';
-      const pendingOrdersTotal = pRow.TOTAL || 0;
-      const conversionRatio = pRow.CONVERSION_RATIO || '0%';
+      // const pendingOrdersTotal = pRow.TOTAL || 0;
+      // const conversionRatio = pRow.CONVERSION_RATIO || '0%';
 
       const saudaAvg = saudaAvgRes.rows || [];
       const salesAvg = salesAvgRes.rows || [];
       const allSaudaAvg = allSaudaAvgRes.rows || [];
       const saudaRate2026 = saudaRateRow.AVERAGE || 0;
-      const monthlyGd = gdRow.MONTHLY_GD || 0;
-      const dailyGd = gdRow.DAILY_GD || 0;
+      // const monthlyGd = gdRow.MONTHLY_GD || 0;
+      // const dailyGd = gdRow.DAILY_GD || 0;
 
 
       // Gate/Dispatch stats calculation removed
@@ -439,14 +483,12 @@ async function getDashboardData({
       return {
         summary: {
           monthlyStats,
-          pendingOrdersTotal,
-          conversionRatio,
+          pendingStats,
+          gdStats,
           saudaAvg,
           allSaudaAvg,
           salesAvg,
           saudaRate2026,
-          monthlyGd,
-          dailyGd,
         },
         filters: {
           parties: uniqueParties,
