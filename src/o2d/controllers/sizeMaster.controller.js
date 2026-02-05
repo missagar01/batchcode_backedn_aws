@@ -76,7 +76,7 @@ const createEnquiry = async (req, res) => {
 
         const errors = [];
         const validatedItems = items.map((item, index) => {
-            const { item_type, size, thickness, enquiry_date, customer, quantity } = item;
+            const { item_type, size, thickness, enquiry_date, customer, quantity, sales_executive } = item;
 
             const missing = [];
             if (!item_type) missing.push('item_type');
@@ -100,7 +100,7 @@ const createEnquiry = async (req, res) => {
                 }
             }
 
-            return { item_type, size, thickness, enquiry_date, customer, quantity: cleanQuantity };
+            return { item_type, size, thickness, enquiry_date, customer, quantity: cleanQuantity, sales_executive };
         });
 
         if (errors.length > 0) {
