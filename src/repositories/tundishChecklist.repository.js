@@ -1,5 +1,63 @@
 const pool = require("../config/db");
 
+let tundishChecklistSchemaReadyPromise;
+let tundishChecklistIdSequenceReadyPromise;
+
+const ensureTundishChecklistSchema = async () => {
+  if (tundishChecklistSchemaReadyPromise) {
+    return tundishChecklistSchemaReadyPromise;
+  }
+
+  tundishChecklistSchemaReadyPromise = pool
+    .query(`
+      ALTER TABLE tundish_checklist
+        ADD COLUMN IF NOT EXISTS tundish_number integer,
+        ADD COLUMN IF NOT EXISTS nozzle_plate_check text,
+        ADD COLUMN IF NOT EXISTS well_block_check text,
+        ADD COLUMN IF NOT EXISTS board_proper_set text,
+        ADD COLUMN IF NOT EXISTS board_sand_filling text,
+        ADD COLUMN IF NOT EXISTS refractory_slag_cleaning text,
+        ADD COLUMN IF NOT EXISTS tundish_mession_name text,
+        ADD COLUMN IF NOT EXISTS handover_proper_check text,
+        ADD COLUMN IF NOT EXISTS handover_nozzle_installed text,
+        ADD COLUMN IF NOT EXISTS handover_masala_inserted text,
+        ADD COLUMN IF NOT EXISTS stand1_mould_operator text,
+        ADD COLUMN IF NOT EXISTS stand2_mould_operator text,
+        ADD COLUMN IF NOT EXISTS timber_man_name text,
+        ADD COLUMN IF NOT EXISTS laddle_operator_name text,
+        ADD COLUMN IF NOT EXISTS shift_incharge_name text,
+        ADD COLUMN IF NOT EXISTS forman_name text;
+    `)
+    .catch((error) => {
+      tundishChecklistSchemaReadyPromise = null;
+      throw error;
+    });
+
+  return tundishChecklistSchemaReadyPromise;
+};
+
+const ensureTundishChecklistIdSequence = async () => {
+  if (tundishChecklistIdSequenceReadyPromise) {
+    return tundishChecklistIdSequenceReadyPromise;
+  }
+
+  tundishChecklistIdSequenceReadyPromise = (async () => {
+    await pool.query(`CREATE SEQUENCE IF NOT EXISTS tundish_checklist_id_seq;`);
+    await pool.query(`
+      SELECT setval(
+        'tundish_checklist_id_seq',
+        COALESCE((SELECT MAX(id) FROM tundish_checklist), 0) + 1,
+        false
+      );
+    `);
+  })().catch((error) => {
+    tundishChecklistIdSequenceReadyPromise = null;
+    throw error;
+  });
+
+  return tundishChecklistIdSequenceReadyPromise;
+};
+
 const insertTundishChecklist = async (payload) => {
   const {
     sample_timestamp,
@@ -22,19 +80,8 @@ const insertTundishChecklist = async (payload) => {
     unique_code
   } = payload;
 
-  try {
-    await pool.query(`
-      CREATE SEQUENCE IF NOT EXISTS tundish_checklist_id_seq;
-      SELECT setval('tundish_checklist_id_seq', COALESCE((SELECT MAX(id) FROM tundish_checklist), 0) + 1, false);
-    `);
-  } catch (seqError) {
-    // If sequence creation fails, try to set it if it exists
-    try {
-      await pool.query(`SELECT setval('tundish_checklist_id_seq', COALESCE((SELECT MAX(id) FROM tundish_checklist), 0) + 1, false);`);
-    } catch (e) {
-      // Ignore - sequence might not exist, will use DEFAULT
-    }
-  }
+  await ensureTundishChecklistSchema();
+  await ensureTundishChecklistIdSequence();
 
   const query = `
     INSERT INTO tundish_checklist (
@@ -89,11 +136,34 @@ const insertTundishChecklist = async (payload) => {
     unique_code
   ];
 
-  const { rows } = await pool.query(query, values);
-  return rows[0];
+  let result;
+  try {
+    result = await pool.query(query, values);
+  } catch (error) {
+    const looksLikeIdConflict =
+      error?.code === "23505" && /id/i.test(String(error?.detail || ""));
+
+    if (!looksLikeIdConflict) {
+      throw error;
+    }
+
+    await pool.query(`
+      SELECT setval(
+        'tundish_checklist_id_seq',
+        COALESCE((SELECT MAX(id) FROM tundish_checklist), 0) + 1,
+        false
+      );
+    `);
+
+    result = await pool.query(query, values);
+  }
+
+  return result.rows[0];
 };
 
 const findTundishChecklists = async ({ id, uniqueCode } = {}) => {
+  await ensureTundishChecklistSchema();
+
   const filters = [];
   const values = [];
 
