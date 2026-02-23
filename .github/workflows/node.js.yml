@@ -1,4 +1,4 @@
-name: Deploy to EC2 (Self Hosted)
+name: 🚀 Auto Deploy to EC2
 
 on:
   push:
@@ -7,31 +7,28 @@ on:
 
 jobs:
   deploy:
-    name: Deploy Backend
     runs-on: self-hosted
 
     steps:
-      - name: 📥 Checkout Code
+      # 1️⃣ Checkout Code (DO NOT clean untracked files)
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
+        with:
+          clean: false   # 🔥 Important (will NOT delete .env)
 
+      # 2️⃣ Setup Node
       - name: 🟢 Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
+      # 3️⃣ Install Dependencies
       - name: 📦 Install Dependencies
         run: npm install
 
-      - name: 🔨 Build Project (if required)
+      # 4️⃣ Restart App Safely (env preserved)
+      - name: 🚀 Restart PM2
         run: |
-          if [ -f package.json ] && grep -q "\"build\"" package.json; then
-            npm run build
-          else
-            echo "No build script found, skipping build."
-          fi
-
-      - name: 🔁 Restart PM2
-        run: |
-          pm2 delete batchcode-backend || true
-          pm2 start ecosystem.config.js || pm2 start index.js --name batchcode-backend
+          pm2 restart batchcode-backend --update-env || \
+          pm2 start server.js --name batchcode-backend
           pm2 save
