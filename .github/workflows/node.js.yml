@@ -25,7 +25,9 @@ jobs:
 
       - name: Restart PM2
         env:
+          NODE_ENV: "production"
           PG_SSL: "true"
+          PGSSLMODE: "require"
         run: |
           pm2 restart batchcode-backend --update-env || \
           pm2 start server.js --name batchcode-backend
