@@ -17,8 +17,41 @@ const configuredOrigins = String(process.env.CORS_ORIGINS || "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const allowWildcardOrigin =
-  configuredOrigins.length === 0 ? !isProduction : configuredOrigins.includes("*");
+const defaultLocalOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174"
+];
+
+const getOriginFromUrl = (value) => {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const baseUrlOrigin = getOriginFromUrl(process.env.BASE_URL);
+
+const fallbackOrigins = isProduction
+  ? [...(baseUrlOrigin ? [baseUrlOrigin] : []), ...defaultLocalOrigins]
+  : ["*"];
+
+const allowedOrigins = Array.from(
+  new Set(configuredOrigins.length > 0 ? configuredOrigins : fallbackOrigins)
+);
+
+const allowWildcardOrigin = allowedOrigins.includes("*");
+
+if (isProduction && configuredOrigins.length === 0) {
+  console.warn(
+    `[WARN] CORS_ORIGINS is empty in production. Using fallback origins: ${allowedOrigins.join(", ")}`
+  );
+}
 
 if (isProduction && allowWildcardOrigin) {
   console.warn(
@@ -28,7 +61,7 @@ if (isProduction && allowWildcardOrigin) {
 
 console.log("[BOOT] CORS Configuration:", {
   enabled: true,
-  allowedOrigins: allowWildcardOrigin ? "ALL (*)" : configuredOrigins,
+  allowedOrigins: allowWildcardOrigin ? "ALL (*)" : allowedOrigins,
   credentials: true
 });
 
@@ -38,12 +71,12 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (allowWildcardOrigin || configuredOrigins.includes(origin)) {
+    if (allowWildcardOrigin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
     console.warn(
-      `CORS: Origin ${origin} not allowed. Allowed origins: ${configuredOrigins.join(", ")}`
+      `CORS: Origin ${origin} not allowed. Allowed origins: ${allowedOrigins.join(", ")}`
     );
     return callback(null, false);
   },

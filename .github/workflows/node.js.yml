@@ -28,7 +28,9 @@ jobs:
           NODE_ENV: "production"
           PG_SSL: "true"
           PGSSLMODE: "require"
+          CORS_ORIGINS: "https://batchcode.sagartmt.com,http://localhost:5174,http://localhost:5173"
         run: |
           pm2 restart batchcode-backend --update-env || \
           pm2 start server.js --name batchcode-backend
           pm2 save
+
