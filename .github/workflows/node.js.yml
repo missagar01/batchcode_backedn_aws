@@ -33,4 +33,3 @@ jobs:
           pm2 restart batchcode-backend --update-env || \
           pm2 start server.js --name batchcode-backend
           pm2 save
-
