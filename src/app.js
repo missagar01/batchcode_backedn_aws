@@ -4,11 +4,8 @@ const helmet = require("helmet");
 const compression = require("compression");
 const path = require("path");
 
-const sharedAuthRoutes = require("./auth/routes/login.routes.js");
-const rootRoutes = require("./routes/root.routes.js");
-const batchcodeApp = require("./batchcode/app.cjs");
-const leadToOrderRoutes = require("./lead-to-order/routes/index.js");
-const o2dRoutes = require("./o2d/routes/index.js");
+const sharedAuthRoutes = require("./routes/login.routes.js");
+const batchcodeRoutes = require("./routes/index.js");
 
 const corsOriginsEnv = process.env.CORS_ORIGINS;
 const corsOrigins = corsOriginsEnv
@@ -56,13 +53,12 @@ const corsOptions = corsOrigins.includes("*")
   };
 
 const apiRouter = express.Router();
-apiRouter.use("/o2d", o2dRoutes);
-apiRouter.use("/lead-to-order", leadToOrderRoutes);
-apiRouter.use("/batchcode", batchcodeApp);
+apiRouter.use("/batchcode", batchcodeRoutes);
 apiRouter.use("/auth", sharedAuthRoutes);
 
 const app = express();
 app.set("trust proxy", 1);
+app.use(require("./middlewares/requestLogger"));
 
 // CORS must be applied FIRST, before any other middleware
 app.use(cors(corsOptions));
@@ -113,9 +109,6 @@ app.use("/uploads", express.static(uploadsPath, {
 
 app.use("/api", apiRouter);
 
-// Root routes (non-/api routes)
-app.use("/", rootRoutes);
-
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
@@ -134,7 +127,6 @@ app.use((err, req, res, next) => {
     console.error('Stack:', err.stack);
   }
 
-  // Ensure CORS headers are ALWAYS set, even on errors
   const origin = req.headers.origin;
   if (origin) {
     const isAllowed = corsOrigins.includes("*") || corsOrigins.includes(origin);
@@ -145,21 +137,31 @@ app.use((err, req, res, next) => {
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
     }
   } else if (corsOrigins.includes("*")) {
-    // If allowing all origins and no origin header, set wildcard
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
-  // Don't send response if headers already sent
   if (res.headersSent) {
     return next(err);
   }
 
-  // Send error response
-  const statusCode = err.statusCode || err.status || 500;
+  const { StatusCodes, getReasonPhrase } = require('http-status-codes');
+  const ApiError = require('./utils/apiError');
+  const { logger } = require('./utils/logger');
+
+  const statusCode = err instanceof ApiError ? err.statusCode : (err.statusCode || err.status || StatusCodes.INTERNAL_SERVER_ERROR);
+  const message = err.message || getReasonPhrase(statusCode);
+
+  if (statusCode >= StatusCodes.INTERNAL_SERVER_ERROR) {
+    logger.error(message, err);
+  } else {
+    logger.warn(message, err);
+  }
+
   res.status(statusCode).json({
     success: false,
-    message: err.message || 'Internal server error',
-    error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    message,
+    details: err instanceof ApiError ? err.details : undefined,
+    error: process.env.NODE_ENV === 'development' && !(err instanceof ApiError) ? err.stack : undefined
   });
 });
 

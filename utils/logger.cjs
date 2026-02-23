@@ -1,4 +1,4 @@
-const { logger, configureLogger } = require("../src/batchcode/utils/logger");
+const { logger, configureLogger } = require("../src/utils/logger");
 
 module.exports = {
   logger,

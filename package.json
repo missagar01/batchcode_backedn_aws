@@ -23,10 +23,8 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "multer-s3": "^3.0.1",
-    "oracledb": "^6.10.0",
     "pg": "^8.16.3",
     "redis": "^5.10.0",
-    "ssh2": "^1.17.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
@@ -36,7 +34,8 @@
     "watch": [
       "server.js",
       "src",
-      "config"
+      "config",
+      "utils"
     ],
     "ext": "js,cjs,json",
     "exec": "node server.js",
