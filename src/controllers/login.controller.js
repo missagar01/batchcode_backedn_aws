@@ -81,7 +81,7 @@ async function login(req, res) {
     }
 
     // Query user from login database
-    const result = await loginQuery(cachedUserSelectQuery, [username.trim()]);
+    const result = await pool.query(cachedUserSelectQuery, [username.trim()]);
 
     if (!result.rows || result.rows.length === 0) {
       return res.status(401).json({
