@@ -26,6 +26,10 @@ async function ensurePostgresConnection() {
       return;
     } catch (err) {
       lastError = err;
+      const authMessage = String(err?.message || "");
+      if (/no pg_hba\.conf entry/i.test(authMessage) && /no encryption/i.test(authMessage)) {
+        console.warn("PostgreSQL rejected non-SSL connection. Set PG_SSL=true (or PGSSLMODE=require) in deployment env.");
+      }
       console.warn(`⚠️ Postgres connection attempt ${attempt}/${maxRetries} failed:`, err.message);
 
       if (attempt < maxRetries) {

@@ -1,33 +1,31 @@
-name: 🚀 Auto Deploy to EC2 (Master)
+name: Auto Deploy to EC2 (Master)
 
 on:
   push:
     branches:
-      - master   # ✅ master branch
+      - master
 
 jobs:
   deploy:
-    runs-on: self-hosted   # ✅ EC2 runner
+    runs-on: self-hosted
 
     steps:
-      # 1️⃣ Checkout WITHOUT deleting .env
-      - name: 📥 Checkout Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          clean: false   # 🔥 important (.env safe)
+          clean: false
 
-      # 2️⃣ Setup Node
-      - name: 🟢 Setup Node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # 3️⃣ Install Dependencies
-      - name: 📦 Install Dependencies
+      - name: Install Dependencies
         run: npm install
 
-      # 4️⃣ Restart PM2 safely
-      - name: 🚀 Restart PM2
+      - name: Restart PM2
+        env:
+          PG_SSL: "true"
         run: |
           pm2 restart batchcode-backend --update-env || \
           pm2 start server.js --name batchcode-backend
