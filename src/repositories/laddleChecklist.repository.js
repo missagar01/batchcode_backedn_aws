@@ -1,5 +1,45 @@
 const pool = require("../config/db");
 
+let laddleChecklistIdSequenceReadyPromise;
+
+const ensureLaddleChecklistIdSequence = async () => {
+  if (laddleChecklistIdSequenceReadyPromise) {
+    return laddleChecklistIdSequenceReadyPromise;
+  }
+
+  laddleChecklistIdSequenceReadyPromise = (async () => {
+    await pool.query(`CREATE SEQUENCE IF NOT EXISTS laddle_checklist_id_seq;`);
+    await pool.query(`
+      ALTER TABLE laddle_checklist
+      ALTER COLUMN id SET DEFAULT nextval('laddle_checklist_id_seq');
+    `);
+    await pool.query(`
+      SELECT setval(
+        'laddle_checklist_id_seq',
+        COALESCE((SELECT MAX(id) FROM laddle_checklist), 0) + 1,
+        false
+      );
+    `);
+    await pool.query(`
+      UPDATE laddle_checklist
+      SET id = nextval('laddle_checklist_id_seq')
+      WHERE id IS NULL;
+    `);
+    await pool.query(`
+      SELECT setval(
+        'laddle_checklist_id_seq',
+        COALESCE((SELECT MAX(id) FROM laddle_checklist), 0) + 1,
+        false
+      );
+    `);
+  })().catch((error) => {
+    laddleChecklistIdSequenceReadyPromise = null;
+    throw error;
+  });
+
+  return laddleChecklistIdSequenceReadyPromise;
+};
+
 const insertLaddleChecklist = async (payload) => {
   const {
     sample_timestamp,
@@ -22,8 +62,11 @@ const insertLaddleChecklist = async (payload) => {
     unique_code
   } = payload;
 
+  await ensureLaddleChecklistIdSequence();
+
   const query = `
     INSERT INTO laddle_checklist (
+      id,
       sample_timestamp,
       laddle_number,
       sample_date,
@@ -44,6 +87,7 @@ const insertLaddleChecklist = async (payload) => {
       unique_code
     )
     VALUES (
+      nextval('laddle_checklist_id_seq'),
       $1, $2, $3, $4, $5,
       $6, $7, $8, $9, $10,
       $11, $12, $13, $14, $15,
@@ -73,8 +117,29 @@ const insertLaddleChecklist = async (payload) => {
     unique_code
   ];
 
-  const { rows } = await pool.query(query, values);
-  return rows[0];
+  let result;
+  try {
+    result = await pool.query(query, values);
+  } catch (error) {
+    const looksLikeIdConflict =
+      error?.code === "23505" && /id/i.test(String(error?.detail || ""));
+
+    if (!looksLikeIdConflict) {
+      throw error;
+    }
+
+    await pool.query(`
+      SELECT setval(
+        'laddle_checklist_id_seq',
+        COALESCE((SELECT MAX(id) FROM laddle_checklist), 0) + 1,
+        false
+      );
+    `);
+
+    result = await pool.query(query, values);
+  }
+
+  return result.rows[0];
 };
 
 const findLaddleChecklists = async ({ id, uniqueCode } = {}) => {
