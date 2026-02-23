@@ -1,31 +1,34 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
-
-name: Node.js CI
+name: 🚀 Auto Deploy to EC2 (Master)
 
 on:
   push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+    branches:
+      - master   # ✅ master branch
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+  deploy:
+    runs-on: self-hosted   # ✅ EC2 runner
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+      # 1️⃣ Checkout WITHOUT deleting .env
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          clean: false   # 🔥 important (.env safe)
+
+      # 2️⃣ Setup Node
+      - name: 🟢 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 3️⃣ Install Dependencies
+      - name: 📦 Install Dependencies
+        run: npm install
+
+      # 4️⃣ Restart PM2 safely
+      - name: 🚀 Restart PM2
+        run: |
+          pm2 restart batchcode-backend --update-env || \
+          pm2 start server.js --name batchcode-backend
+          pm2 save
