@@ -73,6 +73,8 @@ async function login(req, res) {
     });
   }
 
+  
+
   try {
     // Build or use cached query
     if (!cachedUserSelectQuery) {
