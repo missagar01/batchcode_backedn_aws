@@ -1,5 +1,30 @@
 const pool = require("../config/db");
 
+let laddleReturnIdSequenceReadyPromise;
+
+const ensureLaddleReturnIdSequence = async () => {
+  if (laddleReturnIdSequenceReadyPromise) {
+    return laddleReturnIdSequenceReadyPromise;
+  }
+
+  
+  laddleReturnIdSequenceReadyPromise = (async () => {
+    await pool.query(`CREATE SEQUENCE IF NOT EXISTS laddle_return_id_seq;`);
+    await pool.query(`
+      SELECT setval(
+        'laddle_return_id_seq',
+        COALESCE((SELECT MAX(id) FROM laddle_return), 0) + 1,
+        false
+      );
+    `);
+  })().catch((error) => {
+    laddleReturnIdSequenceReadyPromise = null;
+    throw error;
+  });
+
+  return laddleReturnIdSequenceReadyPromise;
+};
+
 const insertLaddleReturn = async (payload) => {
   const {
     sample_timestamp,
@@ -22,8 +47,11 @@ const insertLaddleReturn = async (payload) => {
     unique_code
   } = payload;
 
+  await ensureLaddleReturnIdSequence();
+
   const query = `
     INSERT INTO laddle_return (
+      id,
       sample_timestamp,
       laddle_return_date,
       laddle_return_time,
@@ -44,6 +72,7 @@ const insertLaddleReturn = async (payload) => {
       unique_code
     )
     VALUES (
+      nextval('laddle_return_id_seq'),
       $1, $2, $3, $4, $5,
       $6, $7, $8, $9, $10,
       $11, $12, $13, $14, $15,
@@ -73,7 +102,29 @@ const insertLaddleReturn = async (payload) => {
     unique_code
   ];
 
-  const { rows } = await pool.query(query, values);
+  let result;
+  try {
+    result = await pool.query(query, values);
+  } catch (error) {
+    const looksLikeIdConflict =
+      error?.code === "23505" && /id/i.test(String(error?.detail || ""));
+
+    if (!looksLikeIdConflict) {
+      throw error;
+    }
+
+    await pool.query(`
+      SELECT setval(
+        'laddle_return_id_seq',
+        COALESCE((SELECT MAX(id) FROM laddle_return), 0) + 1,
+        false
+      );
+    `);
+
+    result = await pool.query(query, values);
+  }
+
+  const { rows } = result;
   return rows[0];
 };
 
