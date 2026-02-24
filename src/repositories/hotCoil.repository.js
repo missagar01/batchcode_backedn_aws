@@ -24,6 +24,29 @@ const ensureHotCoilIdSequence = async () => {
   return hotCoilIdSequenceReadyPromise;
 };
 
+let hotCoilSchemaReadyPromise;
+
+const ensureHotCoilSchema = async () => {
+  if (hotCoilSchemaReadyPromise) {
+    return hotCoilSchemaReadyPromise;
+  }
+
+  hotCoilSchemaReadyPromise = (async () => {
+    // Add missing columns if they don't exist
+    await pool.query(`
+      ALTER TABLE hot_coil 
+      ADD COLUMN IF NOT EXISTS picture text,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    `);
+  })().catch((error) => {
+    hotCoilSchemaReadyPromise = null;
+    throw error;
+  });
+
+  return hotCoilSchemaReadyPromise;
+};
+
 const insertHotCoil = async (payload) => {
   const {
     sample_timestamp,
@@ -41,6 +64,7 @@ const insertHotCoil = async (payload) => {
     unique_code
   } = payload;
 
+  await ensureHotCoilSchema();
   await ensureHotCoilIdSequence();
 
   const query = `
@@ -58,9 +82,11 @@ const insertHotCoil = async (payload) => {
       strand1_temperature,
       strand2_temperature,
       shift_supervisor,
-      unique_code
+      unique_code,
+      created_at,
+      updated_at
     )
-    VALUES (nextval('hot_coil_id_seq'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    VALUES (nextval('hot_coil_id_seq'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
     RETURNING *
   `;
 

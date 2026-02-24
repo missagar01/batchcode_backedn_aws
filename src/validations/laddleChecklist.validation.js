@@ -104,7 +104,8 @@ const createLaddleChecklistSchema = {
     timber_man_name: optionalTrimmedString('timber_man_name', 100),
     laddle_man_name: optionalTrimmedString('laddle_man_name', 100),
     laddle_foreman_name: optionalTrimmedString('laddle_foreman_name', 100),
-    supervisor_name: optionalTrimmedString('supervisor_name', 100)
+    supervisor_name: optionalTrimmedString('supervisor_name', 100),
+    dip_reading: optionalTrimmedString('dip_reading', 100)
   })
 };
 

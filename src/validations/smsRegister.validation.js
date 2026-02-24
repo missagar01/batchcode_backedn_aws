@@ -45,6 +45,17 @@ const temperatureField = z
     'temperature must be 50 characters or fewer'
   );
 
+const melterNameField = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((value) => {
+    if (value === undefined || value === null) {
+      return '';
+    }
+    return value.trim();
+  })
+  .refine((value) => value.length > 0, 'melter_name is required')
+  .refine((value) => value.length <= 100, 'melter_name must be 100 characters or fewer');
+
 const createSmsRegisterSchema = {
   body: z.object({
     sample_timestamp: timestampField,
@@ -67,6 +78,7 @@ const createSmsRegisterSchema = {
       }),
     sms_head: z.string().min(1, 'sms_head is required').max(150),
     furnace_number: z.string().min(1, 'furnace_number is required').max(50),
+    melter_name: melterNameField,
     remarks: optionalString,
     picture: optionalString,
     shift_incharge: z.string().min(1, 'shift_incharge is required').max(100),

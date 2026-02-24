@@ -7,6 +7,7 @@ const pipeMillRoutes = require('./pipeMill.routes');
 const laddleChecklistRoutes = require('./laddleChecklist.routes');
 const tundishChecklistRoutes = require('./tundishChecklist.routes');
 const laddleReturnRoutes = require('./laddleReturn.routes');
+const patchingChecklistRoutes = require('./patchingChecklist.routes');
 const adminRoutes = require('./admin.routes');
 const authRoutes = require('./auth.routes');
 const dashboardRoutes = require('./dashboard.routes');
@@ -24,5 +25,6 @@ router.use('/', pipeMillRoutes);
 router.use('/', laddleChecklistRoutes);
 router.use('/', tundishChecklistRoutes);
 router.use('/', laddleReturnRoutes);
+router.use('/', patchingChecklistRoutes);
 
 module.exports = router;

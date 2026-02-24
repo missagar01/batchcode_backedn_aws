@@ -1,6 +1,25 @@
 const pool = require("../config/db");
 
+let smsRegisterSchemaReadyPromise;
 let smsRegisterIdSequenceReadyPromise;
+
+const ensureSmsRegisterSchema = async () => {
+  if (smsRegisterSchemaReadyPromise) {
+    return smsRegisterSchemaReadyPromise;
+  }
+
+  smsRegisterSchemaReadyPromise = pool
+    .query(`
+      ALTER TABLE sms_register
+      ADD COLUMN IF NOT EXISTS melter_name text;
+    `)
+    .catch((error) => {
+      smsRegisterSchemaReadyPromise = null;
+      throw error;
+    });
+
+  return smsRegisterSchemaReadyPromise;
+};
 
 const ensureSmsRegisterIdSequence = async () => {
   if (smsRegisterIdSequenceReadyPromise) {
@@ -42,6 +61,7 @@ const insertSmsRegister = async (payload) => {
     laddle_number,
     sms_head,
     furnace_number,
+    melter_name = null,
     remarks = null,
     picture = null,
     shift_incharge,
@@ -49,6 +69,14 @@ const insertSmsRegister = async (payload) => {
     unique_code
   } = payload;
 
+  const normalizedMelterName =
+    typeof melter_name === "string" && melter_name.trim().length > 0
+      ? melter_name.trim()
+      : typeof payload?.melterName === "string" && payload.melterName.trim().length > 0
+        ? payload.melterName.trim()
+        : null;
+
+  await ensureSmsRegisterSchema();
   await ensureSmsRegisterIdSequence();
 
   const queryText = `
@@ -59,13 +87,14 @@ const insertSmsRegister = async (payload) => {
       laddle_number,
       sms_head,
       furnace_number,
+      melter_name,
       remarks,
       picture,
       shift_incharge,
       temperature,
       unique_code
     )
-    VALUES (nextval('sms_register_id_seq'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    VALUES (nextval('sms_register_id_seq'), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     RETURNING *
   `;
 
@@ -75,6 +104,7 @@ const insertSmsRegister = async (payload) => {
     laddle_number ?? null,
     sms_head,
     furnace_number,
+    normalizedMelterName,
     remarks,
     picture,
     shift_incharge,
@@ -109,6 +139,8 @@ const insertSmsRegister = async (payload) => {
 };
 
 const findSmsRegisters = async ({ id, uniqueCode } = {}) => {
+  await ensureSmsRegisterSchema();
+
   const filters = [];
   const values = [];
 

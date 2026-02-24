@@ -267,7 +267,7 @@ const formatReCoilerMessage = (reCoilerData, hotCoilData) => {
   message += `Contractor : ${reCoilerData.contractor || ''}\n`;
   message += `Machine Number : ${reCoilerData.machine_number || ''}\n`;
   message += `Welder Name : ${reCoilerData.welder_name || ''}\n`;
-
+  message += `Shift : ${reCoilerData.shift || ''}\n`;
 
   return message;
 };
@@ -370,11 +370,20 @@ const formatQcLabMessage = (qcData) => {
   return message;
 };
 
-// Format Tundish Checklist message
 const formatTundishMessage = (tundishData) => {
   const timestamp = formatTimestamp(tundishData.sample_timestamp);
-  const datePart = timestamp.split(' ')[0];
-  const timePart = timestamp.split(' ')[1] || '';
+
+  // Use explicit date if available, otherwise use timestamp
+  let datePart = "";
+  if (tundishData.sample_date) {
+    const d = new Date(tundishData.sample_date);
+    datePart = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  } else {
+    datePart = timestamp.split(' ')[0];
+  }
+
+  // Use explicit time if available, otherwise use timestamp
+  const timePart = tundishData.sample_time || (timestamp.split(' ')[1] || '');
 
   let message = `🧾 TUNDISH MAKING CHECKLIST REPORT  \n`;
   message += `(टनडिश बनाने वाला चेकलिस्ट रिपोर्ट)\n\n`;
@@ -444,7 +453,8 @@ const formatLaddleMessage = (laddleData) => {
   message += `- Timber Man: ${laddleData.timber_man_name || ''}\n`;
   message += `- Laddle Man: ${laddleData.laddle_man_name || ''}\n`;
   message += `- Foreman: ${laddleData.laddle_foreman_name || ''}\n`;
-  message += `- Supervisor (Controller): ${laddleData.supervisor_name || ''}\n\n`;
+  message += `- Supervisor (Controller): ${laddleData.supervisor_name || ''}\n`;
+  message += `- Dip Reading: ${laddleData.dip_reading || ''}\n\n`;
   message += `🔰 Verified and submitted successfully.`;
 
   return message;

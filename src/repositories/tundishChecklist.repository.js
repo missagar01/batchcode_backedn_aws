@@ -11,6 +11,8 @@ const ensureTundishChecklistSchema = async () => {
   tundishChecklistSchemaReadyPromise = pool
     .query(`
       ALTER TABLE tundish_checklist
+        ADD COLUMN IF NOT EXISTS sample_date date,
+        ADD COLUMN IF NOT EXISTS sample_time time,
         ADD COLUMN IF NOT EXISTS tundish_number integer,
         ADD COLUMN IF NOT EXISTS nozzle_plate_check text,
         ADD COLUMN IF NOT EXISTS well_block_check text,
@@ -26,7 +28,43 @@ const ensureTundishChecklistSchema = async () => {
         ADD COLUMN IF NOT EXISTS timber_man_name text,
         ADD COLUMN IF NOT EXISTS laddle_operator_name text,
         ADD COLUMN IF NOT EXISTS shift_incharge_name text,
-        ADD COLUMN IF NOT EXISTS forman_name text;
+        ADD COLUMN IF NOT EXISTS forman_name text,
+        ADD COLUMN IF NOT EXISTS remarks text,
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS sample_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+      -- Ensure defaults are set if columns existed without them
+      ALTER TABLE tundish_checklist ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE tundish_checklist ALTER COLUMN sample_timestamp SET DEFAULT CURRENT_TIMESTAMP;
+
+      -- Ensure existing boolean columns are converted to text if they exist
+      DO $$ 
+      BEGIN 
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tundish_checklist' AND column_name = 'nozzle_plate_check' AND data_type = 'boolean') THEN
+          ALTER TABLE tundish_checklist ALTER COLUMN nozzle_plate_check TYPE text USING (CASE WHEN nozzle_plate_check THEN 'Done' ELSE 'Not Done' END);
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tundish_checklist' AND column_name = 'well_block_check' AND data_type = 'boolean') THEN
+          ALTER TABLE tundish_checklist ALTER COLUMN well_block_check TYPE text USING (CASE WHEN well_block_check THEN 'Done' ELSE 'Not Done' END);
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tundish_checklist' AND column_name = 'board_proper_set' AND data_type = 'boolean') THEN
+          ALTER TABLE tundish_checklist ALTER COLUMN board_proper_set TYPE text USING (CASE WHEN board_proper_set THEN 'Done' ELSE 'Not Done' END);
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tundish_checklist' AND column_name = 'board_sand_filling' AND data_type = 'boolean') THEN
+          ALTER TABLE tundish_checklist ALTER COLUMN board_sand_filling TYPE text USING (CASE WHEN board_sand_filling THEN 'Done' ELSE 'Not Done' END);
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tundish_checklist' AND column_name = 'refractory_slag_cleaning' AND data_type = 'boolean') THEN
+          ALTER TABLE tundish_checklist ALTER COLUMN refractory_slag_cleaning TYPE text USING (CASE WHEN refractory_slag_cleaning THEN 'Done' ELSE 'Not Done' END);
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tundish_checklist' AND column_name = 'handover_proper_check' AND data_type = 'boolean') THEN
+          ALTER TABLE tundish_checklist ALTER COLUMN handover_proper_check TYPE text USING (CASE WHEN handover_proper_check THEN 'Yes' ELSE 'No' END);
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tundish_checklist' AND column_name = 'handover_nozzle_installed' AND data_type = 'boolean') THEN
+          ALTER TABLE tundish_checklist ALTER COLUMN handover_nozzle_installed TYPE text USING (CASE WHEN handover_nozzle_installed THEN 'Yes' ELSE 'No' END);
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tundish_checklist' AND column_name = 'handover_masala_inserted' AND data_type = 'boolean') THEN
+          ALTER TABLE tundish_checklist ALTER COLUMN handover_masala_inserted TYPE text USING (CASE WHEN handover_masala_inserted THEN 'Yes' ELSE 'No' END);
+        END IF;
+      END $$;
     `)
     .catch((error) => {
       tundishChecklistSchemaReadyPromise = null;
@@ -61,6 +99,8 @@ const ensureTundishChecklistIdSequence = async () => {
 const insertTundishChecklist = async (payload) => {
   const {
     sample_timestamp,
+    sample_date,
+    sample_time,
     tundish_number,
     nozzle_plate_check,
     well_block_check,
@@ -77,6 +117,7 @@ const insertTundishChecklist = async (payload) => {
     laddle_operator_name,
     shift_incharge_name,
     forman_name,
+    remarks,
     unique_code
   } = payload;
 
@@ -87,6 +128,8 @@ const insertTundishChecklist = async (payload) => {
     INSERT INTO tundish_checklist (
       id,
       sample_timestamp,
+      sample_date,
+      sample_time,
       tundish_number,
       nozzle_plate_check,
       well_block_check,
@@ -103,20 +146,23 @@ const insertTundishChecklist = async (payload) => {
       laddle_operator_name,
       shift_incharge_name,
       forman_name,
-      unique_code
+      remarks,
+      unique_code,
+      created_at
     )
     VALUES (
       nextval('tundish_checklist_id_seq'),
-      $1, $2, $3, $4, $5,
-      $6, $7, $8, $9, $10,
-      $11, $12, $13, $14, $15,
-      $16, $17, $18
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+      $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+      $21, DEFAULT
     )
     RETURNING *
   `;
 
   const values = [
     sample_timestamp ?? null,
+    sample_date ?? null,
+    sample_time ?? null,
     tundish_number ?? null,
     nozzle_plate_check,
     well_block_check,
@@ -133,6 +179,7 @@ const insertTundishChecklist = async (payload) => {
     laddle_operator_name,
     shift_incharge_name,
     forman_name,
+    remarks ?? null,
     unique_code
   ];
 

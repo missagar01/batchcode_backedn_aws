@@ -52,13 +52,15 @@ const insertPipeMill = async (payload) => {
       thickness,
       remarks,
       picture,
-      unique_code
+      unique_code,
+      created_at
     )
     VALUES (
       nextval('pipe_mill_id_seq'),
       $1, $2, $3, $4, $5,
       $6, $7, $8, $9, $10,
-      $11, $12, $13, $14, $15
+      $11, $12, $13, $14, $15,
+      CURRENT_TIMESTAMP
     )
     RETURNING *
   `;

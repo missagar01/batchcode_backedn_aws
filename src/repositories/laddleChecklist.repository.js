@@ -1,6 +1,30 @@
 const pool = require("../config/db");
 
 let laddleChecklistIdSequenceReadyPromise;
+let laddleChecklistSchemaReadyPromise;
+
+const ensureLaddleChecklistSchema = async () => {
+  if (laddleChecklistSchemaReadyPromise) {
+    return laddleChecklistSchemaReadyPromise;
+  }
+
+  laddleChecklistSchemaReadyPromise = pool
+    .query(`
+      ALTER TABLE laddle_checklist
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS sample_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      
+      -- Ensure defaults are set if columns existed without them
+      ALTER TABLE laddle_checklist ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE laddle_checklist ALTER COLUMN sample_timestamp SET DEFAULT CURRENT_TIMESTAMP;
+    `)
+    .catch((error) => {
+      laddleChecklistSchemaReadyPromise = null;
+      throw error;
+    });
+
+  return laddleChecklistSchemaReadyPromise;
+};
 
 const ensureLaddleChecklistIdSequence = async () => {
   if (laddleChecklistIdSequenceReadyPromise) {
@@ -58,10 +82,12 @@ const insertLaddleChecklist = async (payload) => {
     timber_man_name = null,
     laddle_man_name = null,
     laddle_foreman_name = null,
-    supervisor_name = null,
-    unique_code
+    supervisor_name,
+    unique_code,
+    dip_reading
   } = payload;
 
+  await ensureLaddleChecklistSchema();
   await ensureLaddleChecklistIdSequence();
 
   const query = `
@@ -84,14 +110,16 @@ const insertLaddleChecklist = async (payload) => {
       laddle_man_name,
       laddle_foreman_name,
       supervisor_name,
-      unique_code
+      unique_code,
+      dip_reading,
+      created_at
     )
     VALUES (
       nextval('laddle_checklist_id_seq'),
       $1, $2, $3, $4, $5,
       $6, $7, $8, $9, $10,
       $11, $12, $13, $14, $15,
-      $16, $17, $18
+      $16, $17, $18, $19, DEFAULT
     )
     RETURNING *
   `;
@@ -114,7 +142,8 @@ const insertLaddleChecklist = async (payload) => {
     laddle_man_name,
     laddle_foreman_name,
     supervisor_name,
-    unique_code
+    unique_code,
+    dip_reading ?? null
   ];
 
   let result;

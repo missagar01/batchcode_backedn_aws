@@ -71,7 +71,8 @@ const createReCoilerSchema = {
     incharge: optionalStringField('incharge', 100),
     contractor: optionalListField('contractor', 255),
     machine_number: machineNumberArray,
-    welder_name: optionalStringField('welder_name', 100)
+    welder_name: optionalStringField('welder_name', 100),
+    shift: optionalStringField('shift', 20)
   })
 };
 

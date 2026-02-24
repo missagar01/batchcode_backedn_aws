@@ -8,16 +8,16 @@ const extractMillNumber = (millNumber) => {
   if (!millNumber || typeof millNumber !== 'string') {
     return '';
   }
-  
+
   // Remove "PIPE MILL " prefix (case insensitive) and trim
   const cleaned = millNumber.trim().replace(/^pipe\s+mill\s+/i, '');
-  
+
   // Extract just the number part (e.g., "01", "02", "03")
   const numberMatch = cleaned.match(/(\d+)/);
   if (numberMatch) {
     return numberMatch[1];
   }
-  
+
   // If no number found, return cleaned string as fallback
   return cleaned;
 };
@@ -30,16 +30,16 @@ const generateUniqueCode = (recoilerShortCode, millNumber) => {
   if (!recoilerShortCode) {
     throw new Error('recoiler_short_code is required to generate unique code');
   }
-  
+
   if (!millNumber) {
     throw new Error('mill_number is required to generate unique code');
   }
-  
+
   const millNum = extractMillNumber(millNumber);
   if (!millNum) {
     throw new Error('Could not extract mill number from mill_number field');
   }
-  
+
   // Format: recoiler_short_code + mill_number
   // Example: "903B" + "01" = "903B01"
   return `${recoilerShortCode}${millNum}`;
@@ -48,7 +48,7 @@ const generateUniqueCode = (recoilerShortCode, millNumber) => {
 const createPipeMill = async (payload) => {
   // Generate unique code from recoiler_short_code + mill_number
   const unique_code = generateUniqueCode(payload.recoiler_short_code, payload.mill_number);
-  
+
   try {
     return await pipeMillRepository.insertPipeMill({ ...payload, unique_code });
   } catch (error) {

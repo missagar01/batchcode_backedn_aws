@@ -50,7 +50,9 @@ const createTundishChecklistSchema = {
     timber_man_name: trimmedString('timber_man_name'),
     laddle_operator_name: trimmedString('laddle_operator_name'),
     shift_incharge_name: trimmedString('shift_incharge_name'),
-    forman_name: trimmedString('forman_name')
+    forman_name: trimmedString('forman_name'),
+    sample_date: z.string().optional().nullable(),
+    sample_time: z.string().optional().nullable()
   })
 };
 

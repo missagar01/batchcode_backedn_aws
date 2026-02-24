@@ -10,7 +10,8 @@ const insertReCoiler = async (payload) => {
     contractor = null,
     machine_number = null,
     welder_name = null,
-    unique_code
+    unique_code,
+    shift = null
   } = payload;
 
   const pool = require("../config/db");
@@ -42,11 +43,12 @@ const insertReCoiler = async (payload) => {
       contractor,
       machine_number,
       welder_name,
-      unique_code
+      unique_code,
+      shift
     )
     VALUES (
       nextval('re_coiler_id_seq'),
-      $1, $2, $3, $4, $5, $6, $7, $8, $9
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
     )
     RETURNING *
   `;
@@ -60,7 +62,8 @@ const insertReCoiler = async (payload) => {
     contractor,
     machine_number,
     welder_name,
-    unique_code
+    unique_code,
+    shift
   ];
 
   const { rows } = await pool.query(query, values);
