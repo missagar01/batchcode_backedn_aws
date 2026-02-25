@@ -3,6 +3,8 @@ const path = require('path');
 const multer = require('multer');
 const { logger } = require('../utils/logger');
 
+const UPLOADS_ROOT = path.resolve(__dirname, '..', '..', 'uploads');
+
 const ensureDirectory = (targetPath) => {
   try {
     fs.mkdirSync(targetPath, { recursive: true });
@@ -54,8 +56,9 @@ const normalizeFieldsConfig = (config) => {
 const createFileUploadMiddleware = ({ fieldName, subDirectory, fields, limits, fileFilter = defaultFileFilter }) => {
   const normalizedFields = normalizeFieldsConfig({ fieldName, subDirectory, fields });
   const fieldMap = {};
+  ensureDirectory(UPLOADS_ROOT);
   normalizedFields.forEach(({ fieldName: name, subDirectory: dir }) => {
-    const destinationDir = path.join(process.cwd(), 'uploads', dir);
+    const destinationDir = path.join(UPLOADS_ROOT, dir);
     ensureDirectory(destinationDir);
     fieldMap[name] = { destinationDir, subDirectory: dir };
   });
@@ -91,9 +94,10 @@ const createFileUploadMiddleware = ({ fieldName, subDirectory, fields, limits, f
           const protocol = req.protocol || 'http';
           const host = req.get('host') || 'localhost:3006';
           const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || `${protocol}://${host}`;
+          const cleanBaseUrl = String(baseUrl).replace(/\/+$/, '');
           const relativePath = `/uploads/${dir}/${fileEntry.filename}`;
           // Store as full URL
-          req.body[name] = `${baseUrl}${relativePath}`;
+          req.body[name] = `${cleanBaseUrl}${relativePath}`;
         }
       });
 

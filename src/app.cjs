@@ -19,7 +19,15 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use((req, _res, next) => {
+  const [pathname, query = ''] = String(req.url || '').split('?');
+  const normalizedPathname = pathname.replace(/\/{2,}/g, '/');
+  if (normalizedPathname !== pathname) {
+    req.url = query ? `${normalizedPathname}?${query}` : normalizedPathname;
+  }
+  next();
+});
+app.use('/uploads', express.static(path.resolve(__dirname, '..', 'uploads')));
 
 app.use('/', routes);
 

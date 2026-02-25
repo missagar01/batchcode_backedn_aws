@@ -113,7 +113,16 @@ app.use(
   })
 );
 
-const uploadsPath = path.join(process.cwd(), "uploads");
+app.use((req, _res, next) => {
+  const [pathname, query = ""] = String(req.url || "").split("?");
+  const normalizedPathname = pathname.replace(/\/{2,}/g, "/");
+  if (normalizedPathname !== pathname) {
+    req.url = query ? `${normalizedPathname}?${query}` : normalizedPathname;
+  }
+  next();
+});
+
+const uploadsPath = path.resolve(__dirname, "..", "uploads");
 console.log("[BOOT] Static uploads path:", uploadsPath);
 app.use(
   "/uploads",
