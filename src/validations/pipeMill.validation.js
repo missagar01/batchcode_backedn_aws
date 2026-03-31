@@ -40,6 +40,7 @@ const createPipeMillSchema = {
   body: z.object({
     sample_timestamp: timestampField,
     recoiler_short_code: trimmedString('recoiler_short_code', 50),
+    machine_number: optionalStringField('machine_number', 50),
     mill_number: trimmedString('mill_number', 100),
     section: optionalStringField('section', 50),
     item_type: optionalStringField('item_type', 50),

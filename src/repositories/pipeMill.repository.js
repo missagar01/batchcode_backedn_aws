@@ -4,6 +4,7 @@ const insertPipeMill = async (payload) => {
   const {
     sample_timestamp,
     recoiler_short_code,
+    machine_number = null,
     mill_number,
     section = null,
     item_type = null,
@@ -21,6 +22,11 @@ const insertPipeMill = async (payload) => {
 
   // Ensure sequence exists and use it for id
   try {
+    await pool.query(`
+      ALTER TABLE pipe_mill
+      ADD COLUMN IF NOT EXISTS machine_number text;
+    `);
+
     await pool.query(`
       CREATE SEQUENCE IF NOT EXISTS pipe_mill_id_seq;
       SELECT setval('pipe_mill_id_seq', COALESCE((SELECT MAX(id) FROM pipe_mill), 0) + 1, false);
@@ -40,6 +46,7 @@ const insertPipeMill = async (payload) => {
       id,
       sample_timestamp,
       recoiler_short_code,
+      machine_number,
       mill_number,
       section,
       item_type,
@@ -57,9 +64,9 @@ const insertPipeMill = async (payload) => {
     )
     VALUES (
       nextval('pipe_mill_id_seq'),
-      $1, $2, $3, $4, $5,
-      $6, $7, $8, $9, $10,
-      $11, $12, $13, $14, $15,
+      $1, $2, $3, $4, $5, $6,
+      $7, $8, $9, $10, $11,
+      $12, $13, $14, $15, $16,
       CURRENT_TIMESTAMP
     )
     RETURNING *
@@ -68,6 +75,7 @@ const insertPipeMill = async (payload) => {
   const values = [
     sample_timestamp ?? null,
     recoiler_short_code,
+    machine_number,
     mill_number,
     section,
     item_type,
